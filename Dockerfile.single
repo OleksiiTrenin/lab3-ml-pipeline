@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.7
+# Single-stage варіант ТІЛЬКИ для порівняння розміру з multi-stage (п. 2.8 лабораторної).
+# Навчання й інференс в одному образі: у ньому залишаються датасет,
+# залежності для навчання (scikit-learn, tqdm, scipy ...) і проміжні шари.
+FROM python:3.10-slim
+
+ARG EPOCHS=10
+ARG SEED=42
+ARG MAX_PER_CLASS=0
+ARG MODEL_VERSION=1.0.0
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements-train.txt .
+RUN pip install --no-cache-dir -r requirements-train.txt
+
+COPY src/download.py ./src/download.py
+RUN python src/download.py --classes yes no up down --out /app/data
+
+# Копіюємо лише файли, потрібні для навчання: правка api.py не інвалідує кеш і не запускає навчання знову
+COPY src/__init__.py src/audio.py src/dataset.py src/evaluate.py src/model.py src/train.py ./src/
+RUN python -m src.train --classes yes no up down \
+        --epochs ${EPOCHS} --seed ${SEED} --max-per-class ${MAX_PER_CLASS} \
+        --version ${MODEL_VERSION} --data-root /app/data --out /app/artifacts
+
+COPY src/ ./src/
+
+ENV MODEL_PATH=/app/artifacts/model.pt \
+    PORT=8000 \
+    LOG_LEVEL=INFO \
+    PYTHONUNBUFFERED=1
+
+RUN useradd --create-home appuser
+USER appuser
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["python", "-m", "src.healthcheck"]
+
+CMD ["sh", "-c", "exec uvicorn src.api:app --host 0.0.0.0 --port ${PORT}"]
