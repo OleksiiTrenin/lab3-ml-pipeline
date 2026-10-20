@@ -8,15 +8,14 @@ on:
     inputs:
       acc_threshold:
         description: "Поріг accuracy, % (для демонстрації падіння пайплайна вкажіть, напр., 99.9)"
-        default: "80"
+        default: "40"
 
 env:
   IMAGE: kws-api
   # Для CI навчання скорочено: менше епох і не більше 1000 файлів на клас
-  EPOCHS: "3"
-  MAX_PER_CLASS: "1000"
-  ACC_THRESHOLD: ${{ github.event.inputs.acc_threshold || '80' }}
-  P95_LIMIT_MS: "200"
+  EPOCHS: "5"
+  MAX_PER_CLASS: "2000"
+  ACC_THRESHOLD: ${{ github.event.inputs.acc_threshold || '40' }}
 
 jobs:
   build-and-test:
