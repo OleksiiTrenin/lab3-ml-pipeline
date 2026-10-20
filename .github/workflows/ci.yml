@@ -77,7 +77,7 @@ jobs:
         run: docker exec kws python -m src.evaluate --data-root artifacts/testset --split all
 
       - name: Quality gate - p95 latency
-        run: python3 scripts/benchmark.py --url http://localhost:8000 --wav /tmp/yes.wav -n 100 --max-p95-ms "$P95_LIMIT_MS"
+        run: python3 scripts/benchmark.py --url http://localhost:8000 --wav /tmp/yes.wav -n 100 --max-p95-ms 200
 
       - name: Logs on failure
         if: failure()
