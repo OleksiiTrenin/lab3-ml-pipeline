@@ -8,7 +8,7 @@ on:
     inputs:
       acc_threshold:
         description: "Поріг accuracy, % (для демонстрації падіння пайплайна вкажіть, напр., 99.9)"
-        default: "40"
+        default: "99"
 
 env:
   IMAGE: kws-api
