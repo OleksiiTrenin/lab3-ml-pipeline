@@ -46,6 +46,7 @@ COPY src/ ./src/
 COPY artifacts/ ./artifacts/
 
 ENV MODEL_PATH=/app/artifacts/model.pt \
+    GIT_COMMIT=${GIT_COMMIT} \
     PORT=8000 \
     LOG_LEVEL=INFO \
     PYTHONUNBUFFERED=1
