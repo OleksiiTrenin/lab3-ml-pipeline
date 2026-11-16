@@ -167,9 +167,13 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}/kws-api
+          # push у main: sha-<commit> і latest. Ручний запуск може навчити іншу модель
+          # (інша кількість епох) з того самого коміту, тому він отримує власний тег
+          # і не перезаписує ні sha-<commit>, ні latest.
           tags: |
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,enable=${{ github.event_name == 'push' }}
+            type=raw,value=latest,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=sha,prefix=dispatch-${{ github.run_number }}-sha-,enable=${{ github.event_name == 'workflow_dispatch' }}
 
       - id: build
         uses: docker/build-push-action@v6
