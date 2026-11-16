@@ -7,9 +7,11 @@ data/
 SpeechCommands/
 *.ipynb
 .ipynb_checkpoints
-artifacts/
+# artifacts/ НЕ виключено: runtime-образ копіює модель з контексту збірки
+metrics/
 results/
-samples/
+samples/*.wav
+lab3-logs/
 *.md
 *.zip
 *.tar.gz

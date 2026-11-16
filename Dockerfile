@@ -1,14 +1,8 @@
 # syntax=docker/dockerfile:1.7
-# ================== Stage 1: trainer ==================
-# Тут є важкі залежності для навчання, датасет і сам процес навчання.
-# У фінальний образ нічого з цього не потрапляє, крім папки artifacts/.
+# ================= Target: trainer =================
+# Образ із залежностями для навчання і датасетом. Саме навчання запускається
+# під час `docker run` (ENTRYPOINT), а модель пишеться в змонтований /artifacts.
 FROM python:3.10-slim AS trainer
-
-ARG EPOCHS=10
-ARG SEED=42
-ARG MAX_PER_CLASS=0
-ARG MODEL_VERSION=1.0.0
-
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends libsndfile1 \
@@ -18,29 +12,26 @@ RUN apt-get update && apt-get install -y --no-install-recommends libsndfile1 \
 COPY requirements-train.txt .
 RUN pip install --no-cache-dir -r requirements-train.txt
 
-# Завантаження датасету — окремий шар. Копіюємо лише download.py,
-# тож правки в train.py/api.py не змушують завантажувати 2.3 ГБ повторно.
+# Датасет — окремий шар: копіюємо лише download.py, тож правки решти коду
+# не змушують завантажувати архів 2.3 ГБ повторно (шар береться з кешу GHA).
 COPY src/download.py ./src/download.py
 RUN python src/download.py --classes yes no up down --out /build/data
 
-# Копіюємо лише файли, потрібні для навчання: правка api.py не інвалідує кеш і не запускає навчання знову
-COPY src/__init__.py src/audio.py src/dataset.py src/evaluate.py src/model.py src/train.py ./src/
-# Навчання + оцінка -> /build/artifacts (model.pt, labels.json, metrics.json, samples, testset)
-RUN python -m src.train --classes yes no up down \
-        --epochs ${EPOCHS} --seed ${SEED} --max-per-class ${MAX_PER_CLASS} \
-        --version ${MODEL_VERSION} --data-root /build/data --out /build/artifacts
+COPY src/ ./src/
+# Список дикторів еталонних зразків: їх записи не беруться в навчання
+COPY samples/sources.json ./samples/sources.json
 
-# ================== Stage 2: runtime ==================
+# Навчання запускається під час docker run, а не docker build
+ENTRYPOINT ["python", "-m", "src.train", "--data-root", "/build/data"]
+CMD ["--classes", "yes", "no", "up", "down", "--epochs", "10", \
+     "--seed", "42", "--out", "/artifacts"]
+
+# ================= Target: runtime =================
 FROM python:3.10-slim AS runtime
 
-ARG MODEL_VERSION=1.0.0
 ARG GIT_COMMIT=unknown
-ARG BUILD_DATE=unknown
-
 LABEL org.opencontainers.image.title="kws-api" \
-      org.opencontainers.image.version="${MODEL_VERSION}" \
-      org.opencontainers.image.revision="${GIT_COMMIT}" \
-      org.opencontainers.image.created="${BUILD_DATE}"
+      org.opencontainers.image.revision="${GIT_COMMIT}"
 
 WORKDIR /app
 
@@ -51,7 +42,8 @@ COPY requirements-api.txt .
 RUN pip install --no-cache-dir -r requirements-api.txt
 
 COPY src/ ./src/
-COPY --from=trainer /build/artifacts ./artifacts
+# Модель береться з каталогу artifacts/ (артефакт job train), а не з етапу trainer
+COPY artifacts/ ./artifacts/
 
 ENV MODEL_PATH=/app/artifacts/model.pt \
     PORT=8000 \

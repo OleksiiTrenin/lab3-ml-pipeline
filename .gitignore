@@ -1,9 +1,10 @@
-@"
 .venv/
 __pycache__/
 *.pyc
 data/
 artifacts/
+metrics/
 results/
-yes.wav
-"@ | Set-Content .gitignore
+/yes.wav
+# матеріали звіту (логи, рисунки) — не частина проєкту
+lab3-logs/

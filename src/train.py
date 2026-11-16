@@ -19,7 +19,7 @@ from sklearn.metrics import confusion_matrix
 from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
 
-from src.dataset import SpeechCommandsSubset, split_indices
+from src.dataset import SpeechCommandsSubset, golden_speakers, split_indices
 from src.evaluate import evaluate_model
 from src.model import AudioCNN
 
@@ -65,6 +65,7 @@ def main():
     parser.add_argument("--max-per-class", type=int, default=0, help="0 = без обмеження (для швидкого CI)")
     parser.add_argument("--version", default=os.getenv("MODEL_VERSION", "1.0.0"))
     parser.add_argument("--export-test-per-class", type=int, default=25)
+    parser.add_argument("--exclude", default="samples/sources.json", help="еталонні зразки, дикторів яких не можна брати в навчання")
     args = parser.parse_args()
 
     set_seed(args.seed)
@@ -74,7 +75,11 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
 
     max_per_class = args.max_per_class or None
-    dataset = SpeechCommandsSubset(root=args.data_root, classes=args.classes, max_per_class=max_per_class)
+    excluded = golden_speakers(args.exclude)
+    print(f"Виключено дикторів еталонних зразків: {len(excluded)}")
+    dataset = SpeechCommandsSubset(
+        root=args.data_root, classes=args.classes, max_per_class=max_per_class, exclude_speakers=excluded
+    )
     if len(dataset) == 0:
         sys.exit(f"У {args.data_root} не знайдено wav-файлів для класів {args.classes}")
 
@@ -129,6 +134,7 @@ def main():
         "lr": args.lr,
         "batch_size": args.batch_size,
         "max_per_class": max_per_class,
+        "excluded_speakers": sorted(excluded),
         "num_parameters": n_params,
         "model_size_kb": round(os.path.getsize(model_path) / 1024, 2),
         "torch_version": torch.__version__,

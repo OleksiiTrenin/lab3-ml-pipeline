@@ -3,6 +3,8 @@
 Один і той самий код використовують і src/dataset.py (навчання), і src/api.py
 (сервіс), тому перетворення гарантовано однакові (немає train/serve skew).
 Параметри збігаються з ЛР №1: mono, 16 кГц, рівно 1 с, Mel-спектрограма 64 смуги.
+ЛР №3: спектрограма логарифмується (log-Mel). Без логарифма енергія мовлення
+відрізняється на порядки між записами, і мала CNN навчалася до ~60 % accuracy.
 """
 import numpy as np
 import soundfile as sf
@@ -27,7 +29,7 @@ def decode(source):
 
 
 def preprocess(waveform, sample_rate):
-    """Ресемплінг до 16 кГц, доповнення/обрізання до 1 с, Mel-спектрограма [1, 64, 32]."""
+    """Ресемплінг до 16 кГц, доповнення/обрізання до 1 с, log-Mel-спектрограма [1, 64, 32]."""
     if sample_rate != SAMPLE_RATE:
         resampler = _resamplers.get(sample_rate)
         if resampler is None:
@@ -40,7 +42,7 @@ def preprocess(waveform, sample_rate):
     else:
         waveform = waveform[:, :NUM_SAMPLES]
 
-    return _mel(waveform)
+    return torch.log(_mel(waveform) + 1e-6)
 
 
 def load_spectrogram(source):

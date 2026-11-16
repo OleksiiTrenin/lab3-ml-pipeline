@@ -1,4 +1,5 @@
 import glob
+import json
 import os
 
 import torch
@@ -12,15 +13,19 @@ LABELS = ["yes", "no", "up", "down"]
 class SpeechCommandsSubset(Dataset):
     """Підмножина Google Speech Commands: файли <root>/**/<клас>/*.wav."""
 
-    def __init__(self, root="./data", classes=LABELS, max_per_class=None):
+    def __init__(self, root="./data", classes=LABELS, max_per_class=None, exclude_speakers=()):
         self.classes = list(classes)
         class_to_idx = {c: i for i, c in enumerate(self.classes)}
 
         per_class = {c: [] for c in self.classes}
+        exclude = set(exclude_speakers)
         pattern = os.path.join(root, "**", "*.wav")
         for path in glob.glob(pattern, recursive=True):
             label = os.path.basename(os.path.dirname(path))
-            if label in per_class:
+            # Диктор = частина імені до "_nohash_". Еталонні зразки (samples/) не повинні
+            # потрапити в навчання навіть іншими записами того самого диктора.
+            speaker = os.path.basename(path).split("_nohash_")[0]
+            if label in per_class and speaker not in exclude:
                 per_class[label].append(path)
 
         self.items = []
@@ -46,3 +51,12 @@ def split_indices(n, test_ratio=0.2, seed=42):
     perm = torch.randperm(n, generator=generator).tolist()
     n_test = int(n * test_ratio)
     return perm[n_test:], perm[:n_test]
+
+
+def golden_speakers(path):
+    """Дикторів еталонних зразків читаємо з samples/sources.json ({файл: "клас/диктор_nohash_N.wav"})."""
+    if not path or not os.path.exists(path):
+        return set()
+    with open(path, encoding="utf-8") as f:
+        sources = json.load(f)
+    return {os.path.basename(src).split("_nohash_")[0] for src in sources.values()}

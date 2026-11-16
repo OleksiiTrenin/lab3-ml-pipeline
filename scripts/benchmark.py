@@ -70,7 +70,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://localhost:8000")
     parser.add_argument("--wav", default="samples/yes.wav")
-    parser.add_argument("-n", type=int, default=100)
+    parser.add_argument("-n", "--n", type=int, default=100)
     parser.add_argument("--warmup", type=int, default=10)
     parser.add_argument("--out", help="зберегти результат у JSON")
     parser.add_argument("--max-p95-ms", type=float, help="quality gate: p95 (сервер) не вище цього значення")
@@ -82,6 +82,7 @@ def main():
         s = result[key]
         print(f"{title:22s} mean={s['mean']:.2f} мс  p50={s['p50']:.2f} мс  p95={s['p95']:.2f} мс")
     if args.out:
+        os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump(result, f, indent=2)
 

@@ -1,67 +1,57 @@
-# ЛР №2 — Контейнеризація ML-моделі (аудіокласифікатор yes / no / up / down)
+# ЛР №3 — CI/CD-пайплайн ML-сервісу в GitHub Actions
 
-FastAPI-сервіс інференсу CNN з ЛР №1, упакований у Docker (multi-stage build).
+Аудіокласифікатор команд `yes / no / up / down` (Google Speech Commands, CNN з ЛР №1)
+і FastAPI-сервіс з ЛР №2 (`/health`, `/model-info`, `/predict`). Пайплайн
+[`ml-pipeline.yml`](.github/workflows/ml-pipeline.yml) замінює `ci.yml` з ЛР №2:
+
+```
+pull_request / push / workflow_dispatch
+        │
+        ▼
+ lint ──► train ──► verify ──► build-push
+            │          │           │
+            ▼          ▼           ▼
+       артефакт    артефакт    образ у GHCR
+        model       report     (push у main або ручний запуск з push_image)
+```
+
+| Job | Що робить | Результат |
+| --- | --- | --- |
+| `lint` | `ruff check src/ scripts/` | — |
+| `train` | збирає ціль `trainer`, навчає модель у контейнері (`docker run`) | артефакт `model`: model.pt, labels.json, metrics.json, train.log |
+| `verify` | збирає ціль `runtime` з моделлю, піднімає сервіс, еталонні зразки, quality gate, latency | артефакт `report`: verify.json, latency.json, summary.json, report.md, service.log; Job Summary |
+| `build-push` | публікує образ `ghcr.io/<owner>/<repo>/kws-api:sha-<commit>` і `:latest` | образ у GHCR |
+
+| Тригер | Епох | Записів на клас | Поріг accuracy | Публікація |
+| --- | --- | --- | --- | --- |
+| `pull_request` у `main` | 2 | 1000 | 60 % | ні |
+| `push` у `main` | 10 | усі | 80 % | так |
+| `workflow_dispatch` | з форми | усі | 80 % | якщо `push_image` |
 
 ## Структура
 
 ```
-lab2/
-├── src/            audio.py (препроцесинг), dataset.py, model.py, train.py, evaluate.py,
-│                   download.py (датасет), api.py (FastAPI), healthcheck.py
-├── scripts/        benchmark.py (latency), measure.py (збирання метрик для таблиці)
-├── .github/workflows/ci.yml
-├── Dockerfile          multi-stage: trainer -> runtime
-├── Dockerfile.single   single-stage, лише для порівняння розмірів
-├── requirements-train.txt / requirements-api.txt / requirements-dev.txt
-└── .dockerignore
+.github/workflows/ml-pipeline.yml
+src/        audio.py (log-Mel), dataset.py, model.py, train.py, evaluate.py, download.py, api.py, healthcheck.py
+scripts/    benchmark.py (latency → JSON), verify_model.py (еталонні зразки), make_report.py (Markdown-звіт)
+samples/    yes.wav, no.wav, up.wav, down.wav, expected.json, sources.json
+Dockerfile  цілі trainer і runtime
 ```
 
-`artifacts/` (model.pt, labels.json, metrics.json, samples/, testset/) генерується навчанням.
+Еталонні зразки взято з офіційного тестового набору Speech Commands v0.02
+(`samples/sources.json`). Під час навчання записи цих дикторів виключаються з вибірки.
 
-## Збирання і запуск
+## Локально
 
 ```bash
-docker build -t kws-api:1.0.0 .                       # навчання відбувається під час збирання (етап trainer)
-docker run -d --name kws -p 8000:8000 kws-api:1.0.0
-docker ps                                             # статус має стати "healthy"
-curl http://localhost:8000/health
-curl http://localhost:8000/model-info
-docker cp kws:/app/artifacts/samples/yes.wav .        # приклад для перевірки
-curl -X POST -F "file=@yes.wav" http://localhost:8000/predict
+docker build --target trainer -t kws-trainer .
+mkdir -p artifacts
+docker run --rm -v "$PWD/artifacts:/artifacts" kws-trainer \
+  --classes yes no up down --epochs 10 --seed 42 --out /artifacts
+
+docker build --target runtime -t kws-api .
+docker run -d --name kws -p 8000:8000 kws-api
+python scripts/verify_model.py --url http://localhost:8000 --expected samples/expected.json
 ```
 
-Swagger UI: http://localhost:8000/docs
-
-Параметри збирання: `--build-arg EPOCHS=10 --build-arg MAX_PER_CLASS=0 --build-arg MODEL_VERSION=1.0.0`.
-Змінні середовища сервісу: `MODEL_PATH`, `PORT`, `LOG_LEVEL`, `MAX_UPLOAD_MB`, `TORCH_THREADS`.
-
-## Локальний запуск (без Docker) для порівняння
-
-```bash
-python -m venv .venv && .venv\Scripts\activate        # Linux/macOS: source .venv/bin/activate
-pip install -r requirements-train.txt -r requirements-dev.txt
-python scripts/measure.py export --image kws-api:1.0.0   # ті самі ваги, що й у контейнері
-```
-
-(Альтернатива — навчити локально: `python src/download.py --out data && python -m src.train --data-root data`.)
-
-## Вимірювання (п. 2.8)
-
-```bash
-docker build -f Dockerfile.single -t kws-api:1.0.0-single .
-python scripts/measure.py local  --label "Локально (venv)"
-python scripts/measure.py docker --image kws-api:1.0.0-single --label "Docker (single-stage)"
-python scripts/measure.py docker --image kws-api:1.0.0       --label "Docker (multi-stage)"
-python scripts/measure.py table                           # results/summary.md
-docker history kws-api:1.0.0-single
-docker history kws-api:1.0.0
-```
-
-Для чесного порівняння локальний запуск і контейнер використовують ті самі ваги й той самий тестовий піднабір.
-Повна accuracy на всьому тестовому поділі лежить у `metrics.json` (поле `accuracy` у `/model-info`).
-
-## CI
-
-`.github/workflows/ci.yml`: lint (ruff) -> build -> run -> /health -> smoke test (+ перевірка коду 400 для
-некоректного файлу) -> quality gate по accuracy -> evaluate у контейнері -> quality gate по p95 latency.
-Поріг accuracy задається змінною `ACC_THRESHOLD` (80 %) або вручну під час `workflow_dispatch`.
+Готовий образ: `docker pull ghcr.io/oleksiitrenin/lab3-ml-pipeline/kws-api:latest`.
