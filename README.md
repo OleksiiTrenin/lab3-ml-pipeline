@@ -24,7 +24,7 @@ pull_request / push / workflow_dispatch
 
 | Тригер | Епох | Записів на клас | Поріг accuracy | Публікація |
 | --- | --- | --- | --- | --- |
-| `pull_request` у `main` | 2 | 1000 | 60 % | ні |
+| `pull_request` у `main` | 3 | 2000 | 60 % | ні |
 | `push` у `main` | 10 | усі | 80 % | так |
 | `workflow_dispatch` | з форми | усі | 80 % | якщо `push_image` |
 

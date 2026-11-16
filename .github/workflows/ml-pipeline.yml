@@ -28,9 +28,9 @@ env:
   # PR: коротке навчання; main: повне; ручний запуск: значення з UI
   EPOCHS: >-
     ${{ inputs.epochs
-        || (github.event_name == 'pull_request' && '2' || '10') }}
-  # PR: не більше 1000 записів на клас (перевірка працездатності); main і ручний запуск: увесь датасет
-  MAX_PER_CLASS: ${{ github.event_name == 'pull_request' && '1000' || '0' }}
+        || (github.event_name == 'pull_request' && '3' || '10') }}
+  # PR: не більше 2000 записів на клас (перевірка працездатності); main і ручний запуск: увесь датасет
+  MAX_PER_CLASS: ${{ github.event_name == 'pull_request' && '2000' || '0' }}
   MIN_ACCURACY: ${{ github.event_name == 'pull_request' && '60' || '80' }}
 
 jobs:

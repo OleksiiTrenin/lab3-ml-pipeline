@@ -89,6 +89,7 @@ def model_info():
         "model_size_kb": state["size_kb"],
         "accuracy": state["metrics"].get("accuracy"),  # у відсотках, з metrics.json
         "torch_version": torch.__version__,
+        "git_commit": os.getenv("GIT_COMMIT", "unknown"),  # з якого коду зібрано образ
     }
 
 
